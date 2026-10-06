@@ -24,3 +24,6 @@ htmlcov/
 
 # SNIIV raw data
 data/raw/
+
+# SNIIV processed data
+data/processed/

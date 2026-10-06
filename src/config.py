@@ -18,6 +18,9 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 
 SNIIV_RAW_DIR = RAW_DATA_DIR / "sniiv"
 
+PROCESSED_DATA_DIR = DATA_DIR / "processed"
+
+SNIIV_PROCESSED_DIR = PROCESSED_DATA_DIR / "sniiv"
 
 # ==========================================
 # DIRECTORIOS DEL PROYECTO
