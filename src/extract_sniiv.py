@@ -65,6 +65,13 @@ def extract_year(year: int, force: bool = False):
             "todos los registros deben ser objetos JSON."
         )
 
+    if not records:
+        raise ValueError(
+            f"Respuesta vacía del SNIIV para {year}: "
+            "se esperaba al menos un registro."
+        )
+
+
     # 2. Escribir primero en un archivo temporal.
     temporary_file = output_file.with_suffix(".json.tmp")
 

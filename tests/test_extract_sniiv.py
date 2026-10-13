@@ -103,3 +103,39 @@ def test_unexpected_json_structure_is_rejected(tmp_path, monkeypatch):
 
     output_file = tmp_path / "2026" / "mexico_2026.json"
     assert not output_file.exists()
+
+def test_empty_response_does_not_replace_existing_file(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(extraction, "SNIIV_RAW_DIR", tmp_path)
+
+    output_dir = tmp_path / "2026"
+    output_dir.mkdir()
+
+    output_file = output_dir / "mexico_2026.json"
+    original_content = '[{"año": 2026, "dato": "original"}]'
+
+    output_file.write_text(
+        original_content,
+        encoding="utf-8",
+    )
+
+    response = FakeResponse(
+        text="[]",
+        parsed_data=[],
+    )
+
+    monkeypatch.setattr(
+        extraction.requests,
+        "get",
+        lambda url, timeout: response,
+    )
+
+    with pytest.raises(ValueError, match="Respuesta vacía"):
+        extraction.extract_year(2026, force=True)
+
+    assert output_file.read_text(encoding="utf-8") == original_content
+
+    temporary_file = output_file.with_suffix(".json.tmp")
+    assert not temporary_file.exists()
