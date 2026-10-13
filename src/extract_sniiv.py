@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
-from pathlib import Path
 import json
+import os
 
 import requests
 
@@ -16,23 +16,17 @@ DIMENSIONS = (
 
 
 def build_url(year: int) -> str:
-    """
-    Construye la URL de consulta al API de financiamiento del SNIIV.
-    """
+    """Construye la URL de consulta al API del SNIIV."""
 
     return f"{BASE_URL}/{year}/00/000/{DIMENSIONS}"
 
 
-def extract_year(year: int, force: bool = False) -> Path:
+def extract_year(year: int, force: bool = False):
     """
-    Descarga los datos mensuales de un año y los guarda
-    como JSON dentro del directorio raw correspondiente.
+    Descarga y guarda los datos de un año.
 
-    Si el archivo ya existe, no se vuelve a descargar,
-    a menos que force=True.
-
-    También genera un archivo de metadata con información
-    sobre la extracción realizada.
+    Comprueba la respuesta antes de modificar el archivo original.
+    Utiliza un archivo temporal para sustituir el JSON de forma segura.
     """
 
     output_dir = SNIIV_RAW_DIR / str(year)
@@ -53,20 +47,43 @@ def extract_year(year: int, force: bool = False) -> Path:
     print(f"[EXTRACT] Descargando datos SNIIV para {year}...")
     print(f"[EXTRACT] URL: {url}")
 
-    response = requests.get(
-        url,
-        timeout=120,
-    )
-
+    response = requests.get(url, timeout=120)
     response.raise_for_status()
 
-    output_file.write_text(
-        response.text,
-        encoding="utf-8",
-    )
-
+    # 1. Interpretar y comprobar la respuesta antes de guardar.
     records = response.json()
 
+    if not isinstance(records, list):
+        raise ValueError(
+            f"Respuesta inesperada del SNIIV para {year}: "
+            "se esperaba una lista de registros."
+        )
+
+    if not all(isinstance(record, dict) for record in records):
+        raise ValueError(
+            f"Respuesta inválida del SNIIV para {year}: "
+            "todos los registros deben ser objetos JSON."
+        )
+
+    # 2. Escribir primero en un archivo temporal.
+    temporary_file = output_file.with_suffix(".json.tmp")
+
+    try:
+        temporary_file.write_text(
+            response.text,
+            encoding="utf-8",
+        )
+
+        # 3. Sustituir el archivo original solo cuando el temporal
+        #    ya se escribió correctamente.
+        os.replace(temporary_file, output_file)
+
+    finally:
+        # Limpiar el temporal si la escritura o sustitución falla.
+        if temporary_file.exists():
+            temporary_file.unlink()
+
+    # 4. Registrar los metadatos de la extracción.
     metadata = {
         "year": year,
         "source": "SNIIV",
@@ -85,23 +102,14 @@ def extract_year(year: int, force: bool = False) -> Path:
         encoding="utf-8",
     )
 
-    print(
-        f"[OK] {year}: archivo guardado -> "
-        f"{output_file}"
-    )
-
-    print(
-        f"[OK] {year}: metadata guardada -> "
-        f"{metadata_file}"
-    )
+    print(f"[OK] {year}: archivo guardado -> {output_file}")
+    print(f"[OK] {year}: metadata guardada -> {metadata_file}")
 
     return output_file
 
 
 def main() -> None:
-    """
-    Ejecuta la extracción para todos los años configurados.
-    """
+    """Ejecuta la extracción para todos los años configurados."""
 
     for year in SNIIV_YEARS:
         extract_year(year)
