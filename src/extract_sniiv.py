@@ -14,6 +14,34 @@ DIMENSIONS = (
     "organismo,destino_credito,genero"
 )
 
+REQUIRED_COLUMNS = {
+    "año",
+    "mes",
+    "estado",
+    "municipio",
+    "organismo",
+    "destino_credito",
+    "sexo",
+    "clave_municipio",
+    "clave_estado",
+    "acciones",
+    "monto",
+}
+
+
+def validate_response_schema(records: list[dict]) -> None:
+    """Comprueba que todos los registros tengan las columnas requeridas."""
+
+    for index, record in enumerate(records):
+        missing_columns = REQUIRED_COLUMNS - set(record.keys())
+
+        if missing_columns:
+            raise ValueError(
+                f"Respuesta inválida del SNIIV: "
+                f"registro {index} sin columnas requeridas: "
+                f"{sorted(missing_columns)}."
+            )
+
 
 def build_url(year: int) -> str:
     """Construye la URL de consulta al API del SNIIV."""
@@ -71,6 +99,7 @@ def extract_year(year: int, force: bool = False):
             "se esperaba al menos un registro."
         )
 
+    validate_response_schema(records)
 
     # 2. Escribir primero en un archivo temporal.
     temporary_file = output_file.with_suffix(".json.tmp")

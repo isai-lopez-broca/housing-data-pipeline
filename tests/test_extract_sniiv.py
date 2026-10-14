@@ -24,9 +24,23 @@ class FakeResponse:
 def test_extract_saves_valid_json_and_metadata(tmp_path, monkeypatch):
     monkeypatch.setattr(extraction, "SNIIV_RAW_DIR", tmp_path)
 
+    valid_record = {
+        "año": 2026,
+        "mes": 1,
+        "estado": "Quintana Roo",
+        "municipio": "Benito Juárez",
+        "organismo": "Organismo de prueba",
+        "destino_credito": "Adquisición",
+        "sexo": "No distribuido",
+        "clave_municipio": 23005,
+        "clave_estado": 23,
+        "acciones": 10,
+        "monto": 150000.0,
+    }
+
     response = FakeResponse(
-        text='[{"año": 2026}]',
-        parsed_data=[{"año": 2026}],
+        text=json.dumps([valid_record], ensure_ascii=False),
+        parsed_data=[valid_record],
     )
 
     monkeypatch.setattr(
@@ -38,12 +52,18 @@ def test_extract_saves_valid_json_and_metadata(tmp_path, monkeypatch):
     output_file = extraction.extract_year(2026)
 
     assert output_file.exists()
-    assert json.loads(output_file.read_text(encoding="utf-8")) == [
-        {"año": 2026}
-    ]
 
-    metadata_file = tmp_path / "2026" / "mexico_2026_metadata.json"
-    metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+    saved_records = json.loads(
+        output_file.read_text(encoding="utf-8")
+    )
+    assert saved_records == [valid_record]
+
+    metadata_file = (
+        tmp_path / "2026" / "mexico_2026_metadata.json"
+    )
+    metadata = json.loads(
+        metadata_file.read_text(encoding="utf-8")
+    )
 
     assert metadata["year"] == 2026
     assert metadata["record_count"] == 1
@@ -58,10 +78,14 @@ def test_invalid_json_does_not_replace_existing_file(
 
     output_dir = tmp_path / "2026"
     output_dir.mkdir()
-    output_file = output_dir / "mexico_2026.json"
 
+    output_file = output_dir / "mexico_2026.json"
     original_content = '[{"año": 2026, "dato": "original"}]'
-    output_file.write_text(original_content, encoding="utf-8")
+
+    output_file.write_text(
+        original_content,
+        encoding="utf-8",
+    )
 
     response = FakeResponse(
         text="{json inválido",
@@ -84,7 +108,10 @@ def test_invalid_json_does_not_replace_existing_file(
     assert output_file.read_text(encoding="utf-8") == original_content
 
 
-def test_unexpected_json_structure_is_rejected(tmp_path, monkeypatch):
+def test_unexpected_json_structure_is_rejected(
+    tmp_path,
+    monkeypatch,
+):
     monkeypatch.setattr(extraction, "SNIIV_RAW_DIR", tmp_path)
 
     response = FakeResponse(
@@ -103,6 +130,7 @@ def test_unexpected_json_structure_is_rejected(tmp_path, monkeypatch):
 
     output_file = tmp_path / "2026" / "mexico_2026.json"
     assert not output_file.exists()
+
 
 def test_empty_response_does_not_replace_existing_file(
     tmp_path,
@@ -137,5 +165,61 @@ def test_empty_response_does_not_replace_existing_file(
 
     assert output_file.read_text(encoding="utf-8") == original_content
 
+    temporary_file = output_file.with_suffix(".json.tmp")
+    assert not temporary_file.exists()
+
+
+def test_missing_required_column_does_not_replace_existing_file(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(extraction, "SNIIV_RAW_DIR", tmp_path)
+
+    output_dir = tmp_path / "2026"
+    output_dir.mkdir()
+
+    output_file = output_dir / "mexico_2026.json"
+    original_content = '[{"año": 2026, "dato": "original"}]'
+
+    output_file.write_text(
+        original_content,
+        encoding="utf-8",
+    )
+
+    # Registro incompleto: falta la columna obligatoria "monto".
+    incomplete_record = {
+        "año": 2026,
+        "mes": 1,
+        "estado": "Quintana Roo",
+        "municipio": "Benito Juárez",
+        "organismo": "Organismo de prueba",
+        "destino_credito": "Adquisición",
+        "sexo": "No distribuido",
+        "clave_municipio": 23005,
+        "clave_estado": 23,
+        "acciones": 10,
+    }
+
+    response = FakeResponse(
+        text=json.dumps([incomplete_record], ensure_ascii=False),
+        parsed_data=[incomplete_record],
+    )
+
+    monkeypatch.setattr(
+        extraction.requests,
+        "get",
+        lambda url, timeout: response,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="registro 0 sin columnas requeridas",
+    ):
+        extraction.extract_year(2026, force=True)
+
+    # El archivo anterior debe conservarse intacto.
+    assert output_file.read_text(encoding="utf-8") == original_content
+
+    # No debe quedar un archivo temporal.
     temporary_file = output_file.with_suffix(".json.tmp")
     assert not temporary_file.exists()
