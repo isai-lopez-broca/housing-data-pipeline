@@ -24,6 +24,27 @@ def evaluate_check(name: str, count: int, level: str = "error") -> dict:
     }
 
 
+def find_missing_months(months: list[int]) -> list[int]:
+    """
+    Identifica los meses ausentes entre el primer y el último
+    mes observado, sin asumir que el año debe estar completo.
+    """
+
+    if not months:
+        return []
+
+    observed_months = set(months)
+
+    first_month = min(observed_months)
+    last_month = max(observed_months)
+
+    return [
+        month
+        for month in range(first_month, last_month + 1)
+        if month not in observed_months
+    ]
+
+
 def collect_quality_metrics(connection) -> tuple[list[dict], list[tuple]]:
     """Consulta las métricas de calidad y la cobertura temporal."""
 
@@ -148,11 +169,16 @@ def collect_quality_metrics(connection) -> tuple[list[dict], list[tuple]]:
             ]
         )
 
-        # 5. Cobertura temporal: informativa, no se asume que todo año esté completo.
+        # 5. Cobertura temporal: identificar meses faltantes
+        # entre el primer y el último mes observado.
         cursor.execute(
             """
             SELECT
                 anio,
+                ARRAY_AGG(
+                    DISTINCT mes_numero
+                    ORDER BY mes_numero
+                ) AS meses_observados,
                 COUNT(DISTINCT mes_numero) AS meses_con_datos,
                 MIN(mes_numero) AS primer_mes,
                 MAX(mes_numero) AS ultimo_mes,
@@ -183,15 +209,38 @@ def print_report(checks: list[dict], coverage: list[tuple]) -> None:
         )
 
     print("\n--- Cobertura temporal ---")
+
     if not coverage:
         print("No se encontraron registros en la tabla de hechos.")
     else:
-        for year, months, first_month, last_month, records in coverage:
+        for (
+            year,
+            observed_months,
+            months,
+            first_month,
+            last_month,
+            records,
+        ) in coverage:
+            missing_months = find_missing_months(observed_months or [])
+
             print(
                 f"{year}: {months} meses con datos "
                 f"(mes {first_month} a {last_month}); "
                 f"{records:,} registros"
             )
+
+            if missing_months:
+                missing_labels = ", ".join(
+                    f"{month:02d}" for month in missing_months
+                )
+                print(
+                    f"  [ADVERTENCIA] Meses faltantes dentro "
+                    f"del periodo observado: {missing_labels}"
+                )
+            else:
+                print(
+                    "  [OK] Sin huecos dentro del periodo observado."
+                )
 
     errors = sum(check["status"] == "ERROR" for check in checks)
     warnings = sum(

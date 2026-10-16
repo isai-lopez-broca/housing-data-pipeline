@@ -1,4 +1,8 @@
-from src.audit_data_quality import evaluate_check, print_report
+from src.audit_data_quality import (
+    evaluate_check,
+    find_missing_months,
+    print_report,
+)
 
 
 def test_zero_errors_are_classified_as_ok():
@@ -43,8 +47,9 @@ def test_report_displays_errors_and_warnings(capsys):
         evaluate_check("Montos negativos", 2),
     ]
 
+    # En el periodo observado falta el mes 4.
     coverage = [
-        (2026, 6, 1, 6, 35595),
+        (2026, [1, 2, 3, 5, 6], 5, 1, 6, 35595),
     ]
 
     print_report(checks, coverage)
@@ -53,4 +58,25 @@ def test_report_displays_errors_and_warnings(capsys):
     assert "Errores: 1" in output
     assert "Advertencias: 1" in output
     assert "Resultado final: ERROR" in output
-    assert "2026: 6 meses con datos" in output
+    assert "2026: 5 meses con datos" in output
+    assert "Meses faltantes dentro del periodo observado: 04" in output
+
+
+def test_find_missing_months_detects_gap_between_observed_months():
+    assert find_missing_months([1, 2, 4, 5]) == [3]
+
+
+def test_find_missing_months_does_not_require_future_months():
+    assert find_missing_months([1, 2, 3, 4, 5, 6]) == []
+
+
+def test_find_missing_months_ignores_months_before_first_observation():
+    assert find_missing_months([3, 4, 5]) == []
+
+
+def test_find_missing_months_handles_unsorted_and_repeated_months():
+    assert find_missing_months([5, 1, 2, 2, 5]) == [3, 4]
+
+
+def test_find_missing_months_handles_empty_input():
+    assert find_missing_months([]) == []
