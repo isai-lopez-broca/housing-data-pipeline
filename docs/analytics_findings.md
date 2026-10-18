@@ -55,9 +55,10 @@ Estos resultados describen los registros disponibles en la fuente. Por sí solos
 
 ## 4. Consideraciones sobre la calidad e interpretación
 
+* La variable `acciones` representa el número de acciones de financiamiento o subsidios reportadas por el organismo ejecutor. Su interpretación específica puede variar según el organismo y el tipo de financiamiento. No debe asumirse que cada acción equivale a una vivienda única o a una persona beneficiaria.
+* La variable `monto` representa el recurso monetario ejercido reportado por el organismo ejecutor. Para este proyecto se interpreta en pesos mexicanos (MXN), no como un conteo de viviendas. La documentación consultada no especifica un año base de precios; por ello, no se debe asumir que los montos están ajustados por inflación.
+* Los registros con `acciones = 0` y `monto > 0`, o con `acciones > 0` y `monto = 0`, no se eliminan automáticamente. Se conservan para su análisis y deben interpretarse según el organismo, el destino y la definición de las variables en la fuente.
 * Los meses sin filas en una consulta agregada se consideran periodos sin registros observados para esa combinación de dimensiones; no se convierten automáticamente en ceros.
-* La variable `acciones` conserva el significado reportado por la fuente y no se interpreta automáticamente como viviendas, créditos o personas únicas.
-* La variable `monto` se conserva con la precisión disponible en la fuente. Su unidad debe confirmarse antes de asignarle una etiqueta monetaria específica.
 * Los datos de 2026 cubren únicamente enero-junio.
 * Los datos históricos del SNIIV pueden ser revisados por la fuente; las cifras pueden cambiar entre extracciones.
 * Las diferencias observadas describen asociaciones y patrones, no causas demostradas.
@@ -69,3 +70,12 @@ Estos resultados describen los registros disponibles en la fuente. Por sí solos
 3. Analizar diferencias por organismo, destino y sexo.
 4. Documentar la fecha de extracción y la evolución de los datos históricos.
 5. Evaluar la publicación de resultados y visualizaciones en el README del repositorio.
+
+## 6. Fuentes y definiciones de las variables
+
+1. **SNIIV — Datos abiertos, SEDATU.** Fuente de los datos de financiamiento utilizados en el proyecto: https://sniiv.sedatu.gob.mx/Reporte/Datos_abiertos
+2. **CONAVI — Diccionario de variables de los módulos SNIIV.** Define `Monto` como el recurso ejercido por el organismo ejecutor y `Acciones` como el número de acciones de financiamiento o subsidios ejercidos: https://www.conavi.gob.mx/documentos/Fracc_XLVIII/Modulos%20SNIIV%20Variables.pdf
+
+Las definiciones se interpretan en el contexto del cubo de financiamiento utilizado por el proyecto. Las unidades monetarias se documentan como pesos mexicanos; no se atribuye a los montos un año base de precios que no esté especificado en la documentación consultada.
+
+Fecha de consulta de las fuentes: octubre de 2026.
