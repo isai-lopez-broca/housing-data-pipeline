@@ -40,18 +40,20 @@ El monto por acción se utiliza como indicador descriptivo, calculado dividiendo
 
 ### 3.3. Caso de estudio: CONAVI y Mejoramientos en el Estado de México
 
-Durante enero-junio de 2025, el segmento formado por Estado de México, organismo CONAVI y destino Mejoramientos registró 80,818 acciones.
+Durante enero-junio de 2025, el segmento formado por Estado de México, organismo CONAVI y destino Mejoramientos registró 80,818 acciones, distribuidas entre febrero y mayo:
 
-La distribución mensual observada fue:
+- Febrero: 47,763 acciones.
+- Mayo: 33,055 acciones.
 
-* Febrero: 47,763 acciones.
-* Mayo: 33,055 acciones.
+La suma de ambos meses coincide con el total observado para el primer semestre. En la consulta realizada no se encontraron registros para enero, marzo, abril ni junio de 2025 para esta combinación de dimensiones.
 
-También se identificaron registros en septiembre, octubre y diciembre de 2025. En el periodo comparable de enero-junio de 2024, el mismo segmento registró 2,982 acciones en febrero y no presentó filas para los demás meses en los resultados consultados.
+Al ampliar la revisión a todo 2025, también se identificaron registros en julio (17,120 acciones), septiembre (12), octubre (1,354) y diciembre (810).
+
+En 2024, la misma combinación registró 2,982 acciones en febrero y 11 en julio. No se encontraron registros en los demás meses de ese año en la consulta realizada.
 
 La distribución municipal de 2025 mostró concentraciones importantes en Valle de Chalco Solidaridad, Ecatepec de Morelos, Ixtapaluca, Nezahualcóyotl y Chalco.
 
-Estos resultados describen los registros disponibles en la fuente. Por sí solos no permiten determinar la causa del comportamiento observado ni confirmar que cada acción corresponda a una vivienda única.
+Estos resultados describen los registros disponibles en el almacén para la extracción analizada. No permiten determinar por sí solos las causas de las variaciones observadas ni confirmar que cada acción corresponda a una vivienda única.
 
 ## 4. Consideraciones sobre la calidad e interpretación
 
