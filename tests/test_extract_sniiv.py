@@ -1,18 +1,31 @@
 import json
 
 import pytest
+import requests
 
 import src.extract_sniiv as extraction
 
 
 class FakeResponse:
-    def __init__(self, text, parsed_data=None, json_error=None):
+    """Simula una respuesta HTTP para las pruebas de extracción."""
+
+    def __init__(
+        self,
+        text,
+        parsed_data=None,
+        json_error=None,
+        status_code=200,
+    ):
         self.text = text
         self.parsed_data = parsed_data
         self.json_error = json_error
+        self.status_code = status_code
 
     def raise_for_status(self):
-        return None
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(
+                f"HTTP {self.status_code}"
+            )
 
     def json(self):
         if self.json_error:
@@ -125,7 +138,7 @@ def test_unexpected_json_structure_is_rejected(
         lambda url, timeout: response,
     )
 
-    with pytest.raises(ValueError, match="se esperaba una lista"):
+    with pytest.raises(TypeError, match="se esperaba una lista"):
         extraction.extract_year(2026)
 
     output_file = tmp_path / "2026" / "mexico_2026.json"
@@ -223,3 +236,58 @@ def test_missing_required_column_does_not_replace_existing_file(
     # No debe quedar un archivo temporal.
     temporary_file = output_file.with_suffix(".json.tmp")
     assert not temporary_file.exists()
+
+
+def test_extract_retries_after_temporary_http_error(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(extraction, "SNIIV_RAW_DIR", tmp_path)
+    monkeypatch.setattr(extraction.time, "sleep", lambda _: None)
+
+    valid_record = {
+        "año": 2026,
+        "mes": 1,
+        "estado": "Quintana Roo",
+        "municipio": "Benito Juárez",
+        "organismo": "Organismo de prueba",
+        "destino_credito": "Adquisición",
+        "sexo": "No distribuido",
+        "clave_municipio": 23005,
+        "clave_estado": 23,
+        "acciones": 10,
+        "monto": 150000.0,
+    }
+
+    responses = [
+        FakeResponse(
+            text="Error temporal",
+            status_code=503,
+        ),
+        FakeResponse(
+            text=json.dumps([valid_record], ensure_ascii=False),
+            parsed_data=[valid_record],
+        ),
+    ]
+
+    calls = []
+
+    def fake_get(url, **_):
+        calls.append(url)
+        return responses.pop(0)
+
+    monkeypatch.setattr(
+        extraction.requests,
+        "get",
+        fake_get,
+    )
+
+    output_file = extraction.extract_year(2026)
+
+    assert output_file.exists()
+    assert len(calls) == 2
+
+    saved_records = json.loads(
+        output_file.read_text(encoding="utf-8")
+    )
+    assert saved_records == [valid_record]
