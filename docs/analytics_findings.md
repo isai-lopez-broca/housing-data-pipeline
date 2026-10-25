@@ -81,3 +81,48 @@ Estos resultados describen los registros disponibles en el almacén para la extr
 Las definiciones se interpretan en el contexto del cubo de financiamiento utilizado por el proyecto. Las unidades monetarias se documentan como pesos mexicanos; no se atribuye a los montos un año base de precios que no esté especificado en la documentación consultada.
 
 Fecha de consulta de las fuentes: octubre de 2026.
+
+## Discrepancia entre SNIIV y el reporte de CONAVI: Ecatepec, 2025
+
+### Contexto
+
+Durante el análisis del incremento de acciones de mejoramiento de vivienda en el Estado de México, se compararon los datos de la combinación CONAVI + Mejoramientos para enero-junio de 2025 con el reporte semestral de CONAVI.
+
+### Resultados de la validación
+
+Para el conjunto de datos almacenado en el proyecto, los siguientes resultados coinciden:
+
+| Etapa | Acciones | Monto |
+|---|---:|---:|
+| JSON original de SNIIV | 80,818 | $3,232,720,000.00 |
+| Parquet procesado | 80,818 | $3,232,720,000.00 |
+| PostgreSQL | 80,818 | $3,232,720,000.00 |
+
+La comparación por mes, municipio y sexo para la combinación investigada no encontró diferencias entre Parquet y PostgreSQL en 2024 ni en 2025.
+
+### Diferencia observada en Ecatepec
+
+En el reporte semestral de CONAVI se identificaron 80,819 acciones por $3,232,760,000.00 para el conjunto de municipios considerado. La comparación municipal mostró que 15 municipios coinciden con el cuadro consultado, mientras que Ecatepec presenta una diferencia:
+
+| Fuente | Acciones | Monto |
+|---|---:|---:|
+| Datos del proyecto | 12,456 | $498,240,000.00 |
+| Reporte semestral de CONAVI | 12,457 | $498,280,000.00 |
+| Diferencia (proyecto menos reporte) | -1 | -$40,000.00 |
+
+La revisión del JSON original, el Parquet y PostgreSQL confirma que las tres etapas contienen el mismo resultado para Ecatepec: 12,456 acciones y $498,240,000.00.
+
+### Interpretación y limitaciones
+
+La diferencia no se explica por una discrepancia detectada entre las tres etapas del pipeline. La causa de la diferencia entre el conjunto publicado por SNIIV y el reporte de CONAVI permanece sin confirmar.
+
+SIESCO advierte que su padrón de beneficiarios contiene datos acumulados y que puede presentar variaciones frente a lo reportado en cada trimestre. Esta advertencia es contexto relevante, pero no demuestra la causa específica de la diferencia observada.
+
+No se añadieron registros ni se modificaron cifras para forzar la coincidencia entre fuentes. Hasta contar con una aclaración oficial o evidencia adicional, ambas cifras deben conservarse con su fuente y periodo de referencia.
+
+### Fuentes
+
+- SNIIV, Datos abiertos: https://sniiv.sedatu.gob.mx/Reporte/Datos_abiertos
+- SIESCO, Padrón de beneficiarios y reportes de autoevaluación: https://siesco.conavi.gob.mx/Siesco/Padron
+- Reporte de CONAVI consultado: segundo trimestre de 2025.
+- CONAVI, Reporte del segundo trimestre de 2025: https://siesco.conavi.gob.mx/doc/mensual/202506.pdf
