@@ -1,13 +1,31 @@
-from datetime import datetime, timezone
 import json
 import os
+import time
+from datetime import UTC, datetime
 
 import requests
 
 from src.config import SNIIV_RAW_DIR, SNIIV_YEARS
 
+# ==========================================
+# CONFIGURACIÓN DE LA EXTRACCIÓN
+# ==========================================
 
-BASE_URL = "https://sniiv.sedatu.gob.mx/api/CuboAPI/GetFinanciamiento"
+BASE_URL = (
+    "https://sniiv.sedatu.gob.mx/api/CuboAPI/GetFinanciamiento"
+)
+
+MAX_HTTP_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 2
+
+RETRYABLE_STATUS_CODES = {
+    408,  # Request Timeout
+    429,  # Too Many Requests
+    500,  # Internal Server Error
+    502,  # Bad Gateway
+    503,  # Service Unavailable
+    504,  # Gateway Timeout
+}
 
 DIMENSIONS = (
     "anio,mes,estado,municipio,"
@@ -29,6 +47,70 @@ REQUIRED_COLUMNS = {
 }
 
 
+# ==========================================
+# PETICIÓN HTTP CON REINTENTOS
+# ==========================================
+
+def get_sniiv_response(url: str) -> requests.Response:
+    """
+    Realiza una petición HTTP con un máximo de tres intentos.
+
+    Reintenta ante errores de conexión, timeout y determinados
+    códigos HTTP transitorios.
+
+    Espera 2 segundos antes del segundo intento y 4 antes del tercero.
+    """
+
+    for attempt in range(1, MAX_HTTP_ATTEMPTS + 1):
+        try:
+            response = requests.get(url, timeout=120)
+            status_code = response.status_code
+
+            if (
+                status_code in RETRYABLE_STATUS_CODES
+                and attempt < MAX_HTTP_ATTEMPTS
+            ):
+                delay = RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1))
+
+                print(
+                    f"[RETRY] HTTP {status_code}. "
+                    f"Intento {attempt}/{MAX_HTTP_ATTEMPTS}. "
+                    f"Reintentando en {delay} segundos..."
+                )
+
+                time.sleep(delay)
+                continue
+
+            response.raise_for_status()
+            return response
+
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+        ) as exc:
+            if attempt == MAX_HTTP_ATTEMPTS:
+                raise
+
+            delay = RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1))
+
+            print(
+                f"[RETRY] {type(exc).__name__}. "
+                f"Intento {attempt}/{MAX_HTTP_ATTEMPTS}. "
+                f"Reintentando en {delay} segundos..."
+            )
+
+            time.sleep(delay)
+
+    raise RuntimeError(
+        "No se pudo obtener respuesta del SNIIV después de "
+        f"{MAX_HTTP_ATTEMPTS} intentos."
+    )
+
+
+# ==========================================
+# VALIDACIÓN DE LA RESPUESTA
+# ==========================================
+
 def validate_response_schema(records: list[dict]) -> None:
     """Comprueba que todos los registros tengan las columnas requeridas."""
 
@@ -37,11 +119,15 @@ def validate_response_schema(records: list[dict]) -> None:
 
         if missing_columns:
             raise ValueError(
-                f"Respuesta inválida del SNIIV: "
+                "Respuesta inválida del SNIIV: "
                 f"registro {index} sin columnas requeridas: "
                 f"{sorted(missing_columns)}."
             )
 
+
+# ==========================================
+# CONSTRUCCIÓN DE LA URL
+# ==========================================
 
 def build_url(year: int) -> str:
     """Construye la URL de consulta al API del SNIIV."""
@@ -49,11 +135,15 @@ def build_url(year: int) -> str:
     return f"{BASE_URL}/{year}/00/000/{DIMENSIONS}"
 
 
+# ==========================================
+# EXTRACCIÓN DE UN AÑO
+# ==========================================
+
 def extract_year(year: int, force: bool = False):
     """
     Descarga y guarda los datos de un año.
 
-    Comprueba la respuesta antes de modificar el archivo original.
+    Valida la respuesta antes de modificar el archivo original.
     Utiliza un archivo temporal para sustituir el JSON de forma segura.
     """
 
@@ -65,8 +155,7 @@ def extract_year(year: int, force: bool = False):
 
     if output_file.exists() and not force:
         print(
-            f"[SKIP] {year}: el archivo ya existe -> "
-            f"{output_file}"
+            f"[SKIP] {year}: el archivo ya existe -> {output_file}"
         )
         return output_file
 
@@ -75,14 +164,13 @@ def extract_year(year: int, force: bool = False):
     print(f"[EXTRACT] Descargando datos SNIIV para {year}...")
     print(f"[EXTRACT] URL: {url}")
 
-    response = requests.get(url, timeout=120)
-    response.raise_for_status()
+    response = get_sniiv_response(url)
 
-    # 1. Interpretar y comprobar la respuesta antes de guardar.
+    # 1. Interpretar y validar la respuesta antes de guardar.
     records = response.json()
 
     if not isinstance(records, list):
-        raise ValueError(
+        raise TypeError(
             f"Respuesta inesperada del SNIIV para {year}: "
             "se esperaba una lista de registros."
         )
@@ -101,7 +189,7 @@ def extract_year(year: int, force: bool = False):
 
     validate_response_schema(records)
 
-    # 2. Escribir primero en un archivo temporal.
+    # 2. Escribir en un archivo temporal.
     temporary_file = output_file.with_suffix(".json.tmp")
 
     try:
@@ -110,12 +198,12 @@ def extract_year(year: int, force: bool = False):
             encoding="utf-8",
         )
 
-        # 3. Sustituir el archivo original solo cuando el temporal
-        #    ya se escribió correctamente.
+        # 3. Reemplazar el JSON anterior solo después de escribir
+        # correctamente el archivo temporal.
         os.replace(temporary_file, output_file)
 
     finally:
-        # Limpiar el temporal si la escritura o sustitución falla.
+        # Eliminar el temporal si todavía existe.
         if temporary_file.exists():
             temporary_file.unlink()
 
@@ -124,7 +212,7 @@ def extract_year(year: int, force: bool = False):
         "year": year,
         "source": "SNIIV",
         "url": url,
-        "extracted_at": datetime.now(timezone.utc).isoformat(),
+        "extracted_at": datetime.now(UTC).isoformat(),
         "record_count": len(records),
         "status": "success",
     }
@@ -143,6 +231,10 @@ def extract_year(year: int, force: bool = False):
 
     return output_file
 
+
+# ==========================================
+# EJECUCIÓN PRINCIPAL
+# ==========================================
 
 def main() -> None:
     """Ejecuta la extracción para todos los años configurados."""
