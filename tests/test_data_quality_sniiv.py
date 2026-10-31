@@ -1,11 +1,49 @@
 from pathlib import Path
 
 import pandas as pd
-
+import pytest
 
 PROCESSED_DIR = Path("data/processed/sniiv")
 
 YEARS = [2023, 2024, 2025, 2026]
+
+
+@pytest.fixture
+def processed_parquet_files(tmp_path, monkeypatch):
+    """
+    Crea archivos Parquet temporales para probar
+    las reglas de calidad sin depender de datos locales.
+    """
+
+    processed_dir = tmp_path / "processed" / "sniiv"
+    processed_dir.mkdir(parents=True)
+
+    monkeypatch.setitem(
+        globals(),
+        "PROCESSED_DIR",
+        processed_dir,
+    )
+
+    for year in YEARS:
+        df = pd.DataFrame({
+            "año": [year],
+            "mes": ["enero"],
+            "estado": ["Quintana Roo"],
+            "municipio": ["Benito Juárez"],
+            "organismo": ["CONAVI"],
+            "destino_credito": ["Mejoramiento"],
+            "sexo": ["No especificado"],
+            "clave_municipio": ["005"],
+            "clave_estado": ["23"],
+            "acciones": [10],
+            "monto": [1000.0],
+            "mes_numero": [1],
+            "fecha_key": [year * 100 + 1],
+        })
+
+        file_path = processed_dir / f"sniiv_{year}.parquet"
+
+        df.to_parquet(file_path, index=False)
 
 
 def load_parquet(year: int) -> pd.DataFrame:
@@ -22,7 +60,7 @@ def load_parquet(year: int) -> pd.DataFrame:
     return pd.read_parquet(file_path)
 
 
-def test_processed_files_exist():
+def test_processed_files_exist(processed_parquet_files):
     """
     Verifica que exista un Parquet para cada año.
     """
@@ -33,7 +71,7 @@ def test_processed_files_exist():
         assert file_path.exists()
 
 
-def test_no_nulls_in_critical_columns():
+def test_no_nulls_in_critical_columns(processed_parquet_files):
     """
     Verifica que las columnas críticas no tengan valores nulos.
     """
@@ -62,7 +100,7 @@ def test_no_nulls_in_critical_columns():
         )
 
 
-def test_month_number_is_valid():
+def test_month_number_is_valid(processed_parquet_files):
     """
     Verifica que mes_numero esté entre 1 y 12.
     """
@@ -75,7 +113,7 @@ def test_month_number_is_valid():
         )
 
 
-def test_actions_are_non_negative():
+def test_actions_are_non_negative(processed_parquet_files):
     """
     Verifica que acciones nunca sea negativa.
     """
@@ -88,7 +126,7 @@ def test_actions_are_non_negative():
         )
 
 
-def test_amounts_are_non_negative():
+def test_amounts_are_non_negative(processed_parquet_files):
     """
     Verifica que monto nunca sea negativo.
     """
@@ -101,7 +139,7 @@ def test_amounts_are_non_negative():
         )
 
 
-def test_natural_grain_is_unique():
+def test_natural_grain_is_unique(processed_parquet_files):
     """
     Verifica que no existan duplicados según el grano natural.
     """
@@ -128,7 +166,7 @@ def test_natural_grain_is_unique():
         )
 
 
-def test_fecha_key_matches_year_and_month():
+def test_fecha_key_matches_year_and_month(processed_parquet_files):
     """
     Verifica que fecha_key corresponda a año y mes_numero.
     """
