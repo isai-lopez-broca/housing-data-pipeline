@@ -291,3 +291,83 @@ def test_extract_retries_after_temporary_http_error(
         output_file.read_text(encoding="utf-8")
     )
     assert saved_records == [valid_record]
+
+
+def test_connection_error_retries_and_recovers(monkeypatch):
+    monkeypatch.setattr(extraction.time, "sleep", lambda _: None)
+
+    responses = [
+        requests.exceptions.ConnectionError("Conexión interrumpida"),
+        FakeResponse(
+            text="[]",
+            parsed_data=[],
+        ),
+    ]
+
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        result = responses.pop(0)
+
+        if isinstance(result, Exception):
+            raise result
+
+        return result
+
+    monkeypatch.setattr(extraction.requests, "get", fake_get)
+
+    response = extraction.get_sniiv_response("https://example.com")
+
+    assert response.status_code == 200
+    assert len(calls) == 2
+
+
+def test_http_retries_stop_after_max_attempts(monkeypatch):
+    delays = []
+    calls = []
+
+    monkeypatch.setattr(
+        extraction.time,
+        "sleep",
+        lambda seconds: delays.append(seconds),
+    )
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return FakeResponse(
+            text="Servicio no disponible",
+            status_code=503,
+        )
+
+    monkeypatch.setattr(extraction.requests, "get", fake_get)
+
+    with pytest.raises(
+        requests.exceptions.HTTPError,
+        match="HTTP 503",
+    ):
+        extraction.get_sniiv_response("https://example.com")
+
+    assert len(calls) == extraction.MAX_HTTP_ATTEMPTS
+    assert delays == [2, 4]
+
+
+def test_non_retryable_http_error_fails_immediately(monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return FakeResponse(
+            text="Recurso no encontrado",
+            status_code=404,
+        )
+
+    monkeypatch.setattr(extraction.requests, "get", fake_get)
+
+    with pytest.raises(
+        requests.exceptions.HTTPError,
+        match="HTTP 404",
+    ):
+        extraction.get_sniiv_response("https://example.com")
+
+    assert len(calls) == 1
