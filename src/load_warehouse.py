@@ -505,7 +505,8 @@ def load_fact_financiamiento(
 
 def load_warehouse() -> None:
     """
-    Ejecuta la carga completa del Data Warehouse.
+    Ejecuta la carga completa del Data Warehouse
+    dentro de una única transacción.
     """
 
     df = load_parquet_files()
@@ -513,34 +514,15 @@ def load_warehouse() -> None:
     connection = create_connection()
 
     try:
+        print("\n[LOAD] Iniciando transacción de carga...")
+
         print("\n[LOAD] Cargando dimensiones...")
 
-        load_dim_fecha(
-            connection,
-            df,
-        )
-
-        load_dim_territorio(
-            connection,
-            df,
-        )
-
-        load_dim_organismo(
-            connection,
-            df,
-        )
-
-        load_dim_destino(
-            connection,
-            df,
-        )
-
-        load_dim_sexo(
-            connection,
-            df,
-        )
-
-        connection.commit()
+        load_dim_fecha(connection, df)
+        load_dim_territorio(connection, df)
+        load_dim_organismo(connection, df)
+        load_dim_destino(connection, df)
+        load_dim_sexo(connection, df)
 
         print("\n[LOAD] Obteniendo claves de dimensiones...")
 
@@ -556,6 +538,7 @@ def load_warehouse() -> None:
             df_with_keys,
         )
 
+        # Confirmar todas las operaciones juntas.
         connection.commit()
 
         print(
@@ -564,10 +547,15 @@ def load_warehouse() -> None:
 
     except Exception:
         connection.rollback()
+        print(
+            "\n[LOAD] Error durante la carga. "
+            "Se revirtieron los cambios de la transacción."
+        )
         raise
 
     finally:
         connection.close()
+        print("[LOAD] Conexión cerrada.")
 
 
 if __name__ == "__main__":
