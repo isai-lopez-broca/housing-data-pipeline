@@ -1,8 +1,8 @@
 from src.validate_sniiv import (
     EXPECTED_COLUMNS,
     validate_columns,
-    validate_values,
     validate_duplicates,
+    validate_values,
 )
 
 
@@ -11,7 +11,7 @@ def make_valid_record():
 
     return {
         "año": 2026,
-        "mes": 1,
+        "mes": "enero",
         "estado": "Quintana Roo",
         "municipio": "Benito Juárez",
         "organismo": "Organismo de prueba",
@@ -62,9 +62,23 @@ def test_validate_values_reports_non_numeric_amount():
     assert any("numérico" in error.lower() for error in errors)
 
 
-def test_validate_values_rejects_month_outside_valid_range():
+def test_validate_values_accepts_valid_month_name():
     record = make_valid_record()
-    record["mes"] = 13
+    record["mes"] = "febrero"
+
+    assert validate_values([record]) == []
+
+
+def test_validate_values_accepts_uppercase_month_name():
+    record = make_valid_record()
+    record["mes"] = "ENERO"
+
+    assert validate_values([record]) == []
+
+
+def test_validate_values_rejects_invalid_month():
+    record = make_valid_record()
+    record["mes"] = "mes-invalido"
 
     errors = validate_values([record])
 
