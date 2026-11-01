@@ -3,7 +3,6 @@ import math
 
 from src.config import SNIIV_RAW_DIR
 
-
 EXPECTED_COLUMNS = {
     "año",
     "mes",
@@ -28,6 +27,20 @@ GRAIN_COLUMNS = [
     "sexo",
 ]
 
+VALID_MONTHS = {
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+}
 
 def load_json(year: int) -> list[dict]:
     """
@@ -131,12 +144,11 @@ def validate_values(records: list[dict]) -> list[str]:
 
         if month is not None:
             if (
-                not isinstance(month, int)
-                or isinstance(month, bool)
-                or not 1 <= month <= 12
+                not isinstance(month, str)
+                or month.lower() not in VALID_MONTHS
             ):
                 errors.append(
-                    f"Registro {index}: mes fuera del rango válido 1-12."
+                    f"Registro {index}: nombre de mes no válido."
                 )
 
         # 3. Validar acciones.
