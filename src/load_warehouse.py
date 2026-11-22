@@ -1,5 +1,6 @@
-from pathlib import Path
+
 from decimal import Decimal
+
 import pandas as pd
 from psycopg2.extras import execute_values
 
@@ -9,7 +10,7 @@ from src.database import create_connection
 
 def load_parquet_files() -> pd.DataFrame:
     """
-    Lee los archivos Parquet de todos los años configurados
+    Lee los archivos Parquet de los años configurados
     y los combina en un único DataFrame.
     """
 
@@ -52,9 +53,7 @@ def load_dim_fecha(
     connection,
     df: pd.DataFrame,
 ) -> None:
-    """
-    Carga la dimensión fecha.
-    """
+    """Carga la dimensión fecha."""
 
     dimension = (
         df[
@@ -100,11 +99,7 @@ def load_dim_fecha(
     """
 
     with connection.cursor() as cursor:
-        execute_values(
-            cursor,
-            sql,
-            rows,
-        )
+        execute_values(cursor, sql, rows)
 
     print(
         f"[LOAD] dim_fecha: "
@@ -116,9 +111,7 @@ def load_dim_territorio(
     connection,
     df: pd.DataFrame,
 ) -> None:
-    """
-    Carga la dimensión territorio.
-    """
+    """Carga la dimensión territorio."""
 
     dimension = (
         df[
@@ -160,11 +153,7 @@ def load_dim_territorio(
     """
 
     with connection.cursor() as cursor:
-        execute_values(
-            cursor,
-            sql,
-            rows,
-        )
+        execute_values(cursor, sql, rows)
 
     print(
         f"[LOAD] dim_territorio: "
@@ -176,9 +165,7 @@ def load_dim_organismo(
     connection,
     df: pd.DataFrame,
 ) -> None:
-    """
-    Carga la dimensión organismo.
-    """
+    """Carga la dimensión organismo."""
 
     values = (
         df["organismo"]
@@ -201,11 +188,7 @@ def load_dim_organismo(
     """
 
     with connection.cursor() as cursor:
-        execute_values(
-            cursor,
-            sql,
-            rows,
-        )
+        execute_values(cursor, sql, rows)
 
     print(
         f"[LOAD] dim_organismo: "
@@ -217,9 +200,7 @@ def load_dim_destino(
     connection,
     df: pd.DataFrame,
 ) -> None:
-    """
-    Carga la dimensión destino.
-    """
+    """Carga la dimensión destino."""
 
     values = (
         df["destino_credito"]
@@ -242,11 +223,7 @@ def load_dim_destino(
     """
 
     with connection.cursor() as cursor:
-        execute_values(
-            cursor,
-            sql,
-            rows,
-        )
+        execute_values(cursor, sql, rows)
 
     print(
         f"[LOAD] dim_destino: "
@@ -258,9 +235,7 @@ def load_dim_sexo(
     connection,
     df: pd.DataFrame,
 ) -> None:
-    """
-    Carga la dimensión sexo.
-    """
+    """Carga la dimensión sexo."""
 
     values = (
         df["sexo"]
@@ -283,11 +258,7 @@ def load_dim_sexo(
     """
 
     with connection.cursor() as cursor:
-        execute_values(
-            cursor,
-            sql,
-            rows,
-        )
+        execute_values(cursor, sql, rows)
 
     print(
         f"[LOAD] dim_sexo: "
@@ -300,8 +271,10 @@ def get_dimension_keys(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Obtiene las claves sustitutas de las dimensiones
-    y las incorpora al DataFrame.
+    Obtiene las claves dimensionales.
+
+    Valida que los JOIN no multipliquen registros
+    y que ninguna clave quede sin correspondencia.
     """
 
     queries = {
@@ -395,11 +368,13 @@ def get_dimension_keys(
         ],
     )
 
+    original_rows = len(df)
+
     result = df.merge(
         fecha_df,
-        left_on="fecha_key",
-        right_on="fecha_key",
+        on="fecha_key",
         how="left",
+        validate="many_to_one",
     )
 
     result = result.merge(
@@ -409,24 +384,63 @@ def get_dimension_keys(
             "clave_municipio",
         ],
         how="left",
+        validate="many_to_one",
     )
 
     result = result.merge(
         organismo_df,
         on="organismo",
         how="left",
+        validate="many_to_one",
     )
 
     result = result.merge(
         destino_df,
         on="destino_credito",
         how="left",
+        validate="many_to_one",
     )
 
     result = result.merge(
         sexo_df,
         on="sexo",
         how="left",
+        validate="many_to_one",
+    )
+
+    if len(result) != original_rows:
+        raise ValueError(
+            "La cantidad de registros cambió durante "
+            "los cruces dimensionales: "
+            f"entrada={original_rows}, "
+            f"salida={len(result)}"
+        )
+
+    key_columns = [
+        "fecha_dimension_key",
+        "territorio_key",
+        "organismo_key",
+        "destino_key",
+        "sexo_key",
+    ]
+
+    missing_keys = result[key_columns].isna().sum()
+    missing_keys = missing_keys[missing_keys > 0]
+
+    if not missing_keys.empty:
+        details = ", ".join(
+            f"{column}={int(count)}"
+            for column, count in missing_keys.items()
+        )
+
+        raise ValueError(
+            "Se encontraron claves dimensionales "
+            f"sin correspondencia: {details}"
+        )
+
+    print(
+        "[LOAD] Integridad dimensional verificada: "
+        f"{len(result):,} registros"
     )
 
     return result
@@ -437,8 +451,9 @@ def load_fact_financiamiento(
     df: pd.DataFrame,
 ) -> None:
     """
-    Carga la tabla de hechos utilizando
-    las claves sustitutas de las dimensiones.
+    Inserta hechos nuevos y actualiza los existentes.
+
+    No elimina registros.
     """
 
     fact = df[
@@ -499,14 +514,213 @@ def load_fact_financiamiento(
 
     print(
         f"[LOAD] fact_financiamiento: "
-        f"{len(rows):,} registros"
+        f"{len(rows):,} registros procesados"
     )
 
 
-def load_warehouse() -> None:
+def validate_snapshot(
+    df: pd.DataFrame,
+    authorized_periods: list[int],
+) -> tuple[list[int], list[tuple]]:
+    """
+    Valida las claves del snapshot y los periodos
+    autorizados antes de permitir eliminaciones.
+
+    Esta validación no demuestra por sí sola
+    la completitud de una extracción SNIIV.
+    """
+
+    if not authorized_periods:
+        raise ValueError(
+            "Debes autorizar explícitamente "
+            "al menos un periodo."
+        )
+
+    periods = [int(period) for period in authorized_periods]
+
+    if len(periods) != len(set(periods)):
+        raise ValueError(
+            "Hay periodos autorizados duplicados."
+        )
+
+    for period in periods:
+        year = period // 100
+        month = period % 100
+
+        if year < 2000 or not 1 <= month <= 12:
+            raise ValueError(
+                f"Periodo inválido: {period}. "
+                "Utiliza el formato AAAAMM."
+            )
+
+    if df.empty:
+        raise ValueError(
+            "No se permite sincronizar "
+            "un snapshot vacío."
+        )
+
+    key_columns = [
+        "fecha_dimension_key",
+        "territorio_key",
+        "organismo_key",
+        "destino_key",
+        "sexo_key",
+    ]
+
+    if df[key_columns].isna().any().any():
+        raise ValueError(
+            "El snapshot contiene claves nulas."
+        )
+
+    snapshot = df[key_columns].copy()
+    snapshot = snapshot.astype("int64")
+
+    if snapshot.duplicated().any():
+        raise ValueError(
+            "El snapshot contiene claves "
+            "de hechos duplicadas."
+        )
+
+    available_periods = set(
+        snapshot["fecha_dimension_key"].unique()
+    )
+
+    missing_periods = set(periods) - available_periods
+
+    if missing_periods:
+        raise ValueError(
+            "El snapshot no contiene los periodos "
+            f"autorizados: {sorted(missing_periods)}"
+        )
+
+    snapshot = snapshot[
+        snapshot["fecha_dimension_key"].isin(periods)
+    ]
+
+    rows = list(
+        snapshot.itertuples(
+            index=False,
+            name=None,
+        )
+    )
+
+    return periods, rows
+
+
+def synchronize_snapshot(
+    connection,
+    df: pd.DataFrame,
+    authorized_periods: list[int],
+) -> int:
+    """
+    Elimina hechos ausentes del snapshot exclusivamente
+    en los periodos autorizados.
+
+    Restricción temporal de seguridad:
+    solo funciona en housing_test_db.
+
+    Debe ejecutarse dentro de la misma transacción
+    que la carga de dimensiones y hechos.
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT current_database();"
+        )
+
+        database_name = cursor.fetchone()[0]
+
+    if database_name != "housing_test_db":
+        raise RuntimeError(
+            "Las eliminaciones están bloqueadas "
+            "fuera de housing_test_db."
+        )
+
+    periods, rows = validate_snapshot(
+        df,
+        authorized_periods,
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            CREATE TEMP TABLE snapshot_keys (
+                fecha_key INTEGER NOT NULL,
+                territorio_key INTEGER NOT NULL,
+                organismo_key INTEGER NOT NULL,
+                destino_key INTEGER NOT NULL,
+                sexo_key SMALLINT NOT NULL,
+                PRIMARY KEY (
+                    fecha_key,
+                    territorio_key,
+                    organismo_key,
+                    destino_key,
+                    sexo_key
+                )
+            ) ON COMMIT DROP;
+        """)
+
+        execute_values(
+            cursor,
+            """
+            INSERT INTO snapshot_keys (
+                fecha_key,
+                territorio_key,
+                organismo_key,
+                destino_key,
+                sexo_key
+            )
+            VALUES %s;
+            """,
+            rows,
+            page_size=5000,
+        )
+
+        cursor.execute(
+            """
+            DELETE FROM fact_financiamiento AS fact
+            WHERE fact.fecha_key = ANY(%s)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM snapshot_keys AS snapshot
+                  WHERE
+                      snapshot.fecha_key = fact.fecha_key
+                      AND snapshot.territorio_key =
+                          fact.territorio_key
+                      AND snapshot.organismo_key =
+                          fact.organismo_key
+                      AND snapshot.destino_key =
+                          fact.destino_key
+                      AND snapshot.sexo_key =
+                          fact.sexo_key
+              );
+            """,
+            (periods,),
+        )
+
+        deleted_rows = cursor.rowcount
+
+    print(
+        f"[LOAD] Snapshot sincronizado: "
+        f"{deleted_rows:,} registros obsoletos "
+        "eliminados."
+    )
+
+    return deleted_rows
+
+
+def load_warehouse(
+    authorized_periods: list[int] | None = None,
+) -> None:
     """
     Ejecuta la carga completa del Data Warehouse
     dentro de una única transacción.
+
+    Por defecto:
+        INSERT + UPDATE, sin eliminaciones.
+
+    Con authorized_periods:
+        INSERT + UPDATE + DELETE controlado,
+        exclusivamente en housing_test_db.
     """
 
     df = load_parquet_files()
@@ -514,9 +728,33 @@ def load_warehouse() -> None:
     connection = create_connection()
 
     try:
-        print("\n[LOAD] Iniciando transacción de carga...")
+        print(
+            "\n[LOAD] Iniciando transacción de carga..."
+        )
 
-        print("\n[LOAD] Cargando dimensiones...")
+        # Protección antes de cualquier escritura.
+        if authorized_periods is not None:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT current_database();"
+                )
+
+                database_name = cursor.fetchone()[0]
+
+            if database_name != "housing_test_db":
+                raise RuntimeError(
+                    "La sincronización con eliminaciones "
+                    "solo se permite en housing_test_db."
+                )
+
+            if not authorized_periods:
+                raise ValueError(
+                    "Debes indicar periodos autorizados."
+                )
+
+        print(
+            "\n[LOAD] Cargando dimensiones..."
+        )
 
         load_dim_fecha(connection, df)
         load_dim_territorio(connection, df)
@@ -524,38 +762,68 @@ def load_warehouse() -> None:
         load_dim_destino(connection, df)
         load_dim_sexo(connection, df)
 
-        print("\n[LOAD] Obteniendo claves de dimensiones...")
+        print(
+            "\n[LOAD] Obteniendo claves de dimensiones..."
+        )
 
         df_with_keys = get_dimension_keys(
             connection,
             df,
         )
 
-        print("[LOAD] Cargando tabla de hechos...")
+        # Validar antes de cargar hechos cuando
+        # se solicita sincronización con eliminaciones.
+        if authorized_periods is not None:
+            validate_snapshot(
+                df_with_keys,
+                authorized_periods,
+            )
+
+        print(
+            "\n[LOAD] Cargando tabla de hechos..."
+        )
 
         load_fact_financiamiento(
             connection,
             df_with_keys,
         )
 
+        if authorized_periods is not None:
+            print(
+                "\n[LOAD] Sincronizando snapshot..."
+            )
+
+            synchronize_snapshot(
+                connection,
+                df_with_keys,
+                authorized_periods,
+            )
+
         # Confirmar todas las operaciones juntas.
         connection.commit()
 
         print(
-            "\n[LOAD] Data Warehouse cargado correctamente."
+            "\n[LOAD] Data Warehouse "
+            "cargado correctamente."
         )
 
     except Exception:
         connection.rollback()
+
         print(
             "\n[LOAD] Error durante la carga. "
-            "Se revirtieron los cambios de la transacción."
+            "Se revirtieron los cambios "
+            "de la transacción."
         )
+
         raise
 
     finally:
         connection.close()
-        print("[LOAD] Conexión cerrada.")
+
+        print(
+            "[LOAD] Conexión cerrada."
+        )
 
 
 if __name__ == "__main__":
