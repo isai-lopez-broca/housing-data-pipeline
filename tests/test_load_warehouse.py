@@ -152,3 +152,102 @@ def test_load_warehouse_rolls_back_when_dimension_load_fails(
     assert connection.commit_calls == 0
     assert connection.rollback_calls == 1
     assert connection.close_calls == 1
+
+def test_get_dimension_keys_rejects_duplicate_dimension_keys(monkeypatch):
+    """Un JOIN no debe multiplicar los registros originales."""
+    import pandas as pd
+
+    class FakeCursor:
+        def __init__(self):
+            self.query = ""
+
+        def execute(self, query):
+            self.query = query
+
+        def fetchall(self):
+            if "FROM dim_fecha" in self.query:
+                return [(202501, 202501)]
+            if "FROM dim_territorio" in self.query:
+                return [
+                    (1, "01", "001"),
+                    (2, "01", "001"),
+                ]
+            if "FROM dim_organismo" in self.query:
+                return [(1, "INFONAVIT")]
+            if "FROM dim_destino" in self.query:
+                return [(1, "Compra")]
+            if "FROM dim_sexo" in self.query:
+                return [(1, "Hombre")]
+            raise AssertionError("Consulta inesperada")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+    df = pd.DataFrame([{
+        "fecha_key": 202501,
+        "clave_estado": "01",
+        "clave_municipio": "001",
+        "organismo": "INFONAVIT",
+        "destino_credito": "Compra",
+        "sexo": "Hombre",
+    }])
+
+    with pytest.raises(pd.errors.MergeError):
+        loader.get_dimension_keys(FakeConnection(), df)
+
+
+def test_get_dimension_keys_rejects_missing_dimension_keys():
+    """Un hecho sin clave dimensional debe provocar un error."""
+    import pandas as pd
+
+    class FakeCursor:
+        def __init__(self):
+            self.query = ""
+
+        def execute(self, query):
+            self.query = query
+
+        def fetchall(self):
+            if "FROM dim_fecha" in self.query:
+                return [(202501, 202501)]
+            if "FROM dim_territorio" in self.query:
+                return [(1, "01", "001")]
+            if "FROM dim_organismo" in self.query:
+                return []
+            if "FROM dim_destino" in self.query:
+                return [(1, "Compra")]
+            if "FROM dim_sexo" in self.query:
+                return [(1, "Hombre")]
+            raise AssertionError("Consulta inesperada")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+    df = pd.DataFrame([{
+        "fecha_key": 202501,
+        "clave_estado": "01",
+        "clave_municipio": "001",
+        "organismo": "INFONAVIT",
+        "destino_credito": "Compra",
+        "sexo": "Hombre",
+    }])
+
+    with pytest.raises(
+        ValueError,
+        match="claves dimensionales sin correspondencia",
+    ):
+        loader.get_dimension_keys(FakeConnection(), df)
