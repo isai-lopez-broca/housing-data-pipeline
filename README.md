@@ -4,6 +4,22 @@
 
 Este proyecto integra datos públicos, aplica validaciones de calidad, transforma archivos JSON a Parquet y carga la información en un almacén de datos dimensional en PostgreSQL. El objetivo es facilitar el análisis de la evolución temporal y las diferencias territoriales del financiamiento de vivienda en México.
 
+## Explorar el proyecto
+
+**[Abrir dashboard interactivo](https://isai-lopez-broca.github.io/housing-data-pipeline/dashboard/)**
+
+**[Ver arquitectura visual](docs/architecture.md)** ·
+**[Consultar hallazgos](docs/analytics_findings.md)**
+
+![Vista previa del dashboard](docs/dashboard-preview.png)
+
+El dashboard incluye tendencias mensuales, comparaciones temporales,
+análisis territorial y distribuciones por organismo, destino y sexo.
+
+Los resultados corresponden a enero de 2023 a junio de 2026.
+Las acciones reportadas no equivalen necesariamente a viviendas,
+créditos únicos o personas beneficiarias.
+
 ## Objetivo del proyecto
 
 Responder la siguiente pregunta de negocio:
@@ -27,46 +43,9 @@ Para responderla, el proyecto construye un flujo de procesamiento reproducible q
 
 ## Arquitectura
 
-El proyecto utiliza una arquitectura de procesamiento por lotes (*batch processing*).
+El proyecto utiliza procesamiento batch desde la API del SNIIV hasta un Data Warehouse dimensional en PostgreSQL y una capa de visualización.
 
-```text
-             SNIIV / SEDATU
-                    |
-                    v
-             API de financiamiento
-                    |
-                    v
-           Extracción con Python
-                    |
-                    v
-          Datos originales en JSON
-                    |
-                    v
-           Validación de datos
-                    |
-                    v
-        Transformación con pandas
-                    |
-                    v
-           Archivos Parquet
-                    |
-                    v
-       Creación del Data Warehouse
-                    |
-                    v
-         Carga dimensional y hechos
-                    |
-                    v
-              PostgreSQL
-                    |
-                    v
-        Auditoría de calidad de datos
-                    |
-                    v
-          Consultas de análisis SQL
-```
-
-El flujo está coordinado por `src/run_pipeline.py`, que ejecuta las etapas del procesamiento y detiene el flujo cuando una etapa crítica falla.
+**[Ver diagrama visual de arquitectura](docs/architecture.md)**
 
 ### Etapas del pipeline
 
@@ -408,38 +387,3 @@ Proyecto personal de portafolio enfocado en ingeniería de datos, procesamiento 
 
 
 ---
-
-## Dashboard interactivo
-
-El proyecto incluye un dashboard para explorar las acciones y los montos de financiamiento de vivienda registrados por el SNIIV en México.
-
-El análisis cubre enero de 2023 a junio de 2026 e incluye:
-
-- Evolución mensual de acciones y montos.
-- Comparación anual y entre periodos equivalentes.
-- Distribución territorial por entidad federativa y municipio.
-- Análisis por organismo, destino y sexo.
-
-**Visualización:** `dashboard/index.html`
-
-![Vista previa del dashboard](docs/dashboard-preview.png)
-
-### Arquitectura de datos
-
-El pipeline integra extracción batch desde la API pública del SNIIV, procesamiento con Python, almacenamiento en Parquet y un Data Warehouse dimensional en PostgreSQL.
-
-El modelo analítico contiene una tabla de hechos y cinco dimensiones.
-
-[Consultar arquitectura visual](docs/architecture.md)
-
-### Consideraciones de interpretación
-
-Las acciones de financiamiento no deben interpretarse automáticamente como número de viviendas, créditos únicos o personas beneficiarias.
-
-Los datos de 2026 corresponden únicamente al periodo enero-junio, por lo que las comparaciones anuales deben considerar esa cobertura parcial.
-
-### Ejecutar el dashboard
-
-Abrir `dashboard/index.html` en un navegador web.
-
-El dashboard utiliza Plotly y los datos analíticos generados a partir del Data Warehouse.
