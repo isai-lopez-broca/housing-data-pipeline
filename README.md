@@ -405,3 +405,41 @@ Estas mejoras son propuestas futuras y no forman parte de las capacidades declar
 Proyecto personal de portafolio enfocado en ingeniería de datos, procesamiento batch, calidad de datos, modelado dimensional y análisis con SQL.
 
 **Repositorio:** [housing-data-pipeline](https://github.com/isai-lopez-broca/housing-data-pipeline)
+
+
+---
+
+## Dashboard interactivo
+
+El proyecto incluye un dashboard para explorar las acciones y los montos de financiamiento de vivienda registrados por el SNIIV en México.
+
+El análisis cubre enero de 2023 a junio de 2026 e incluye:
+
+- Evolución mensual de acciones y montos.
+- Comparación anual y entre periodos equivalentes.
+- Distribución territorial por entidad federativa y municipio.
+- Análisis por organismo, destino y sexo.
+
+**Visualización:** `dashboard/index.html`
+
+![Vista previa del dashboard](docs/dashboard-preview.png)
+
+### Arquitectura de datos
+
+El pipeline integra extracción batch desde la API pública del SNIIV, procesamiento con Python, almacenamiento en Parquet y un Data Warehouse dimensional en PostgreSQL.
+
+El modelo analítico contiene una tabla de hechos y cinco dimensiones.
+
+[Consultar arquitectura visual](docs/architecture.md)
+
+### Consideraciones de interpretación
+
+Las acciones de financiamiento no deben interpretarse automáticamente como número de viviendas, créditos únicos o personas beneficiarias.
+
+Los datos de 2026 corresponden únicamente al periodo enero-junio, por lo que las comparaciones anuales deben considerar esa cobertura parcial.
+
+### Ejecutar el dashboard
+
+Abrir `dashboard/index.html` en un navegador web.
+
+El dashboard utiliza Plotly y los datos analíticos generados a partir del Data Warehouse.
